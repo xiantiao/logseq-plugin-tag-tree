@@ -364,10 +364,9 @@ export function TagEntry({ tag, displayName, treePath }: Props) {
           <TagName>
             <TagNameText
               style={{
-                backgroundColor: 'transparent !important',
-                border: 'none !important',
-                borderRadius: '0 !important',
-                padding: '0 !important',
+                // 筛选模式：固定深灰胶囊底保证白字可读（React 行内样式不支持 !important，
+                // 原来的 transparent !important 等写法会被浏览器忽略，导致浅色主题白字无底色不可见）
+                backgroundColor: 'hsl(215, 15%, 42%)',
               }}
             >
               {displayName ?? tag.name}

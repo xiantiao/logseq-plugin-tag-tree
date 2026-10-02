@@ -1,6 +1,6 @@
 import { QueryResultBlockEntity, QueryResultPageEntity } from 'logseqQueryResultTypes';
 import React from 'react';
-import { entityUuid } from 'utils';
+import { entityUuid, isPage } from 'utils';
 import { styled } from 'stitches.config';
 import { t } from '../../i18n';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -147,6 +147,22 @@ export function TagUsage({ usages }: Props) {
     await logseq.App.pushState('page', { name: tagName });
   };
 
+  // 点击条目：跳转到块所在页面并滚动定位到该块（Logseq 会展开折叠路径并滚动到位）
+  const locateBlock = async (item: QueryResultBlockEntity | QueryResultPageEntity) => {
+    if (isPage(item)) {
+      // tags:: 页面条目：直接打开该页面
+      await logseq.App.pushState('page', { name: (item as QueryResultPageEntity).name });
+      return;
+    }
+    const block = item as QueryResultBlockEntity;
+    const uuid = entityUuid(block);
+    if (!uuid || !block.page?.id) return;
+    const page = await logseq.Editor.getPage(block.page.id).catch(() => null);
+    if (page) {
+      await logseq.Editor.scrollToBlockInPage(page.name, uuid);
+    }
+  };
+
   const handleTextSearch = async (text: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -234,9 +250,8 @@ export function TagUsage({ usages }: Props) {
             );
           }
           elements.push(
-            <ContentText 
+            <ContentText
               key={`text-${lastIndex}`}
-              onClick={(e) => handleTextSearch(text, e)}
               theme={isSimpleTheme ? 'simple' : undefined}
             >
               {truncateText(text)}
@@ -299,7 +314,11 @@ export function TagUsage({ usages }: Props) {
   return (
     <UsageList>
       {usages.map((item, idx) => (
-        <UsageItem key={entityUuid(item) ?? idx}>
+        <UsageItem
+          key={entityUuid(item) ?? idx}
+          onClick={() => void locateBlock(item)}
+          title={t('locateBlock')}
+        >
           {renderContent(item)}
         </UsageItem>
       ))}

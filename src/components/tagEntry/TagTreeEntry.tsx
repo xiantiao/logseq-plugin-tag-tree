@@ -463,10 +463,9 @@ export function TagTreeEntry({ node, depth = 0 }: Props) {
             <TagNameText
               virtual={!isConcept || undefined}
               style={{
-                backgroundColor: 'transparent !important',
-                border: 'none !important',
-                borderRadius: '0 !important',
-                padding: '0 !important',
+                // 筛选模式：固定深灰胶囊底保证白字可读（行内样式不支持 !important，
+                // 深色主题由 .dark-theme 类规则接管为透明底+浅色字，不受影响）
+                backgroundColor: 'hsl(215, 15%, 42%)',
               }}
               title={isConcept ? undefined : t('virtualPathTip')}
             >
