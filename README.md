@@ -100,9 +100,9 @@ See [SETTINGS.md](SETTINGS.md) for details.
 
 ## 🙏 Acknowledgements / 致谢
 
-This plugin builds upon [gidongkwon/logseq-plugin-tags](https://github.com/gidongkwon/logseq-plugin-tags) (published in the marketplace as "Enhanced Tags", MIT License) — thanks for the excellent foundation. The storage model was later fully redesigned around inline hierarchical text (`a/b/#c`).
+This plugin builds upon [jlhulclq/logseq-plugin-new-tags](https://github.com/jlhulclq/logseq-plugin-new-tags) ("Enhanced Tags"), which in turn derives from [gidongkwon/logseq-plugin-tags](https://github.com/gidongkwon/logseq-plugin-tags) by Gidong Kwon — thanks to both for the excellent foundation. The storage model has since been fully redesigned around inline hierarchical text (`a/b/#c`).
 
-本插件基于 [gidongkwon/logseq-plugin-tags](https://github.com/gidongkwon/logseq-plugin-tags)（市场名 "Enhanced Tags"，MIT 许可证）开发，感谢原作者打下的优秀基础。其后存储模型被完全重设计为行内层级文本（`a/b/#c`）。
+本插件基于 [jlhulclq/logseq-plugin-new-tags](https://github.com/jlhulclq/logseq-plugin-new-tags)（"Enhanced Tags"）的框架开发，而其又源自 Gidong Kwon 的 [gidongkwon/logseq-plugin-tags](https://github.com/gidongkwon/logseq-plugin-tags)——感谢两位作者打下的优秀基础。当前版本的存储模型已被完全重设计为行内层级文本（`a/b/#c`）。
 
 ## 📄 License / 许可证
 
