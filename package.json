@@ -2,7 +2,7 @@
   "name": "logseq-plugin-tag-tree",
   "version": "3.0.0",
   "main": "dist/index.html",
-  "author": "jlhulclq",
+  "author": "xiantiao",
   "description": "Tag Tree: hierarchical tags for Logseq with an inline a/b/#c syntax — tree panel, tag filtering (AND/OR/NOT), usage browser, rename/move/merge, and legacy #a/b/c migration.",
   "scripts": {
     "dev": "vite",

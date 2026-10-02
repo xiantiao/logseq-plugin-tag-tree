@@ -66,7 +66,7 @@ Tag Tree 是一个 Logseq 层级标签管理面板，核心是一套纯文本行
 3. Click Install
 
 ### Option B: Manual / 选项B：手动安装
-1. Download the latest zip from [GitHub Releases](https://github.com/jlhulclq/logseq-plugin-new-tags/releases)
+1. Download the latest zip from [GitHub Releases](https://github.com/xiantiao/logseq-plugin-tag-tree/releases)
 2. Unzip it
 3. In Logseq: Settings → Plugins → Load unpacked plugin, select the unzipped folder
 
