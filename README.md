@@ -1,171 +1,109 @@
-# Enhanced Tags Plugin for Logseq / 增强版标签插件
+# Tag Tree — Hierarchical Tags for Logseq / Logseq 层级标签插件
+
+Tag Tree is a hierarchical tags management panel for Logseq, built around a plain-text inline tag syntax: write tags as `a/b/#c` directly in your blocks, and browse, filter, and reorganize them in a tree.
+
+Tag Tree 是一个 Logseq 层级标签管理面板，核心是一套纯文本行内标签语法：在块里直接写 `a/b/#c`，然后在树形面板中浏览、筛选和整理它们。
 
 ## 🎬 Demo / 演示
 
-### Basic Usage / 基本使用
+**Basic operations / 基本操作** — creating hierarchical tags, renaming, moving (drag & drop), merging, removing:
+**基本操作** —— 创建层级标签、重命名、拖拽移动、合并、移除：
+
 ![Basic Usage](demo-basic.gif)
 
-### Theme Settings / 主题设置  
-![Theme Settings](demo-settings.gif)
+**Tag filtering / 标签筛选** — AND/OR includes, excludes, and match results:
+**标签筛选** —— 包含（且/或）、排除与匹配结果：
 
-### Advanced Features / 高级功能
-![Advanced Features](demo-advanced.gif)
-
-### Drag & Drop Sorting / 拖拽排序功能
-![Drag Sort Demo](demo-drag-sort.gif)
+![Filtering](demo-filter.gif)
 
 ---
 
-## 📖 Description / 插件简介
+## 📖 Tag Syntax / 标签语法
 
-**English:**
-Enhanced Tags Plugin is an advanced tags management panel for Logseq that revolutionizes how you browse, search, and organize `#tags`. Built upon the excellent foundation of the original tags plugin, this enhanced version adds powerful new features including dual theme modes, native settings integration, improved UI consistency, and refined user experience.
+| Syntax / 写法 | Meaning / 含义 |
+|---|---|
+| `#c` | Root-level tag, concept `c` / 根级标签 |
+| `a/b/#c` | Hierarchical tag: path `a/b`, concept `c` / 层级标签：路径 `a/b`，概念 `c` |
+| `#a/b/c` (legacy) | Auto-normalized to `a/b/#c` / 旧写法，自动规范化 |
 
-**中文:**
-增强版标签插件是一个功能强大的 Logseq 标签管理面板，彻底改变了您浏览、搜索和组织 `#标签` 的方式。在优秀的原版插件基础上，这个增强版本添加了双主题模式、原生设置集成、改进的UI一致性和精致的用户体验等强大新功能。
+- **The last segment is the concept** — `a/b/#c`, `D/#c` and `#c` all resolve to the same concept page `c`. Tags are grouped by path in the tree, but the concept is shared.
+- **One line, many tags** — a single block can carry multiple inline tags: `a/b/#c D/#c F/#c`.
+- **Plain text storage** — tags live in the block text itself, no block properties involved, so everything stays visible and portable.
+- **Legacy migration** — old `#a/b/c` tags are rewritten to `a/b/#c` automatically as you edit (can be disabled), or in bulk via the context-menu migration command.
 
----
+- **末段即概念** —— `a/b/#c`、`D/#c`、`#c` 都指向同一个概念页面 `c`；树中按路径分组，概念共享。
+- **一行多标签** —— 同一个块可以带多个行内标签：`a/b/#c D/#c F/#c`。
+- **纯文本存储** —— 标签就是块内原文，不依赖块属性，可见、可迁移。
+- **旧格式迁移** —— 旧式 `#a/b/c` 会在编辑时自动改写为 `a/b/#c`（可关闭），也可通过右键菜单批量迁移。
 
-## ✨ Features / 功能特性
+## ✨ Features / 功能
 
-### 🎨 Dual Theme System / 双主题系统
-- **Colorful Theme** / **彩色主题**: Vibrant colors with dynamic tag backgrounds
-- **Simple Theme** / **简单主题**: Clean minimal design with monochrome styling
-- Native Logseq settings integration / 原生Logseq设置集成
+- **Tree panel** — all tags grouped by path/concept, with per-tag usage counts
+- **Search & navigation** — real-time filter, expand/collapse all, click a tag to open its concept page
+- **Drag & drop reordering** — reorder siblings or drop onto a parent to nest; order is persisted
+- **Full tag operations** — rename / move / merge / delete, each with a plan preview before writing; renaming can also rename the concept page
+- **Tag filtering** — 且 / 或 (AND/OR) includes plus excludes (⊘); concepts match under any path, paths match whole subtrees; matched blocks and `tags::` pages are listed and clickable, and can be copied as a Markdown list (block references + page links) with one click
+- **Usage browser** — click a tag to see every block and `tags::` page carrying it; click an entry to jump to the block
+- **Auto refresh** — the panel tracks graph changes (debounced) and offers a manual refresh button
+- **Theme aware** — follows Logseq light/dark mode; colorful / simple styles available
 
-### 🔍 Enhanced Search & Navigation / 增强搜索导航
-- Real-time tag filtering / 实时标签筛选
-- Click tag names to open tag pages directly / 点击标签名直接打开标签页
-- Smart expand/collapse state persistence / 智能展开/折叠状态持久化
-- One-click expand/collapse all tags / 一键展开/折叠全部标签
-
-### 🎯 Improved User Experience / 改进用户体验
-- Consistent font sizes throughout the interface / 界面字体大小一致性
-- Proper expand state visual indicators / 正确的展开状态视觉指示
-- Fixed expand/collapse button functionality / 修复展开/折叠按钮功能
-- Eliminated unnecessary "TXT" badges in simple theme / 简单主题下移除不必要的"TXT"标识
-
-### ⚙️ Advanced Customization / 高级自定义
-- Custom keyboard shortcuts / 自定义快捷键
-- Drag-and-drop tag reordering with persistence / 拖拽排序并持久化
-- Settings accessible via Logseq's native settings panel / 通过Logseq原生设置面板访问配置
-
-### 🎪 Multi-level Tag Support / 多层级标签支持
-- Hierarchical tag structure visualization / 层级标签结构可视化
-- Proper background highlights for expanded states / 展开状态正确的背景高亮
-- Clean content display (pages and text blocks) / 清洁的内容显示（页面和文字块）
+- **树形面板** —— 按路径/概念分组展示全部标签，带使用计数
+- **搜索与导航** —— 实时过滤、一键展开/折叠、点击标签打开概念页面
+- **拖拽排序** —— 同级排序或拖到父节点下嵌套，顺序持久化
+- **完整标签操作** —— 重命名/移动/合并/删除，均先预览写入方案；重命名可同步重命名概念页面
+- **标签筛选** —— 包含（且/或）+ 排除；概念匹配任意路径、路径匹配整个子树；命中块与 `tags::` 页可点击跳转，也可一键复制为 Markdown 列表（块引用 + 页面链接）
+- **用量浏览** —— 点击标签查看所有携带它的块和页面，点击条目定位到块
+- **自动刷新** —— 监听图谱变更（防抖），并提供手动刷新按钮
+- **主题适配** —— 跟随 Logseq 明暗模式，提供彩色/简洁两种风格
 
 ---
 
 ## 🚀 Installation / 安装
 
-### Option A: Logseq Marketplace (Recommended) / 选项A：Logseq市场（推荐）
+### Option A: Logseq Marketplace / 选项A：Logseq 插件市场
 1. Open Logseq → Settings → Plugins → Marketplace
-2. Search for "Enhanced Tags" or "Tags Plugin"
+2. Search for **"Tag Tree"**
 3. Click Install
 
-### Option B: Manual Installation / 选项B：手动安装
-1. Download the latest release from [GitHub Releases](https://github.com/yourusername/logseq-plugin-tags/releases)
-2. Unzip the downloaded file
-3. In Logseq: Settings → Plugins → Load unpacked plugin
-4. Select the unzipped folder
+### Option B: Manual / 选项B：手动安装
+1. Download the latest zip from [GitHub Releases](https://github.com/jlhulclq/logseq-plugin-new-tags/releases)
+2. Unzip it
+3. In Logseq: Settings → Plugins → Load unpacked plugin, select the unzipped folder
 
 ---
 
 ## 🎮 Usage / 使用方法
 
-### Opening the Plugin / 打开插件
-- **Toolbar**: Click the `#` button in the toolbar
-- **Keyboard**: Use your custom shortcut (configurable in settings)
+- **Open the panel**: click the `#` toolbar button, run "Open Tags Panel" from the command palette, or press the shortcut (default `mod+shift+t` / `Cmd/Ctrl+Shift+T`)
+- **Browse**: click arrows to expand/collapse; click a tag name to open its concept page; click the usage count to see all blocks
+- **Organize**: right-click a tag for rename / move / merge / delete / migrate; drag to reorder or nest
+- **Filter**: click the funnel icon in the toolbar, then left-click tags to include, right-click to exclude; toggle 且/或 by clicking the badge; copy results with the 复制 button
 
-### Theme Configuration / 主题配置
-1. Go to Settings → Plugins → Enhanced Tags Plugin → Settings
-2. Choose between:
-   - **Colorful Theme**: Dynamic colors with tag-specific backgrounds
-   - **Simple Theme**: Minimal monochrome design
-3. Set your preferred keyboard shortcut
-4. Click Save
-
-### Tag Management / 标签管理
-- **Search**: Use the search box to filter tags in real-time
-- **Navigate**: Click tag names to open their dedicated tag pages
-- **Reorder**: Drag and drop tags to customize their order
-- **Expand/Collapse**: Use the arrow button to toggle all tags at once
-- **Individual Control**: Click individual arrows to expand specific tags
+- **打开面板**：工具栏 `#` 按钮、命令面板 "Open Tags Panel"，或快捷键（默认 `mod+shift+t`）
+- **浏览**：箭头展开/折叠；点击标签名打开概念页；点击计数查看所有块
+- **整理**：右键标签进行重命名/移动/合并/删除/迁移；拖拽排序或嵌套
+- **筛选**：点击工具栏漏斗图标进入筛选模式，左键包含、右键排除，点击徽标切换且/或，「复制」按钮导出结果
 
 ---
 
 ## ⚙️ Settings / 设置
 
-Access settings via: **Logseq Settings → Plugins → Enhanced Tags Plugin → Settings**
+Settings live in Logseq's native plugin settings: **Settings → Plugins → Tag Tree → Settings**.
 
-### Available Options / 可用选项
+- **Theme style** — colorful / simple / 彩色 / 简洁
+- **Keyboard shortcut** — e.g. `mod+shift+t`, `alt+t` / 打开面板的快捷键
+- **Auto normalize legacy tags** — rewrite `#a/b/c` to `a/b/#c` while editing / 编辑时自动规范化旧式层级标签
 
-#### Theme Style / 主题样式
-- **Colorful Theme** / **彩色主题**: Multi-colored backgrounds with vibrant tag styling
-- **Simple Theme** / **简单主题**: Clean monochrome design without decorative elements
-
-#### Keyboard Shortcut / 快捷键
-- Set a custom keyboard shortcut to quickly open the tags panel
-- Examples: `mod+shift+t`, `alt+t`, `ctrl+shift+p`
-
----
-
-## 🔧 Technical Improvements / 技术改进
-
-### Fixed Issues / 已修复问题
-- ✅ Keyboard shortcut conflicts resolved
-- ✅ Consistent font sizing across all elements  
-- ✅ Proper expand state visual feedback
-- ✅ Fixed expand/collapse button toggle functionality
-- ✅ Corrected multi-level tag background highlighting
-- ✅ Removed unnecessary UI elements in simple theme
-
-### Enhanced Features / 增强功能
-- ✅ Native Logseq settings integration
-- ✅ Dual theme system with instant switching
-- ✅ Improved accessibility and user experience
-- ✅ Better visual hierarchy and consistency
-
----
-
-## 🤝 Contributing / 贡献
-
-We welcome contributions! Please feel free to:
-- Report bugs or suggest features via [GitHub Issues](https://github.com/yourusername/logseq-plugin-tags/issues)
-- Submit pull requests for improvements
-- Share your feedback and usage experiences
-
----
-
-## 📄 License / 许可证
-
-MIT License
+See [SETTINGS.md](SETTINGS.md) for details.
 
 ---
 
 ## 🙏 Acknowledgements / 致谢
 
-This enhanced version builds upon the excellent foundation of [gidongkwon/logseq-plugin-tags](https://github.com/gidongkwon/logseq-plugin-tags) (MIT License). Special thanks to the original author for creating such a useful plugin for the Logseq community.
+This plugin builds upon [gidongkwon/logseq-plugin-tags](https://github.com/gidongkwon/logseq-plugin-tags) (published in the marketplace as "Enhanced Tags", MIT License) — thanks for the excellent foundation. The storage model was later fully redesigned around inline hierarchical text (`a/b/#c`).
 
-本增强版本基于优秀的 [gidongkwon/logseq-plugin-tags](https://github.com/gidongkwon/logseq-plugin-tags) (MIT许可证) 开发。特别感谢原作者为Logseq社区创建了如此有用的插件。
+本插件基于 [gidongkwon/logseq-plugin-tags](https://github.com/gidongkwon/logseq-plugin-tags)（市场名 "Enhanced Tags"，MIT 许可证）开发，感谢原作者打下的优秀基础。其后存储模型被完全重设计为行内层级文本（`a/b/#c`）。
 
----
+## 📄 License / 许可证
 
-## 📈 Changelog / 更新日志
-
-### v2.0.0 (Latest) / v2.0.0 (最新)
-- 🎨 Added dual theme system (Colorful + Simple)
-- ⚙️ Integrated with Logseq native settings
-- 🔧 Fixed expand state visual indicators
-- 📝 Improved font consistency
-- 🚫 Removed "TXT" badges in simple theme
-- ⌨️ Enhanced keyboard shortcut management
-- 🐛 Fixed multiple UI and functional issues
-
-### Previous Versions / 历史版本
-- Based on the original logseq-plugin-tags with enhancements for drag-and-drop, expand/collapse functionality, and improved UI consistency.
-
----
-
-**Made with ❤️ for the Logseq Community**
+MIT License

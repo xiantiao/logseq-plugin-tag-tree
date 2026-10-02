@@ -2,64 +2,45 @@ name: Build plugin
 
 on:
   push:
-    # Sequence of patterns matched against refs/tags
+    # 推送任意 tag（如 v3.0.0）时触发：构建 → 打包 zip → 创建 Release 并附带产物
     tags:
-      - "*" # Push events to matching any tag format, i.e. 1.0, 20.15.10
+      - "*"
 
 env:
-  PLUGIN_NAME: logseq-plugin-new-tags
+  PLUGIN_NAME: logseq-plugin-tag-tree
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
+
       - name: Use Node.js
-        uses: actions/setup-node@v1
+        uses: actions/setup-node@v4
         with:
-          node-version: "14.x" # You might need to adjust this value to your own version
+          node-version: "20"
+
       - name: Build
-        id: build
         run: |
-          npm install -g pnpm
+          npm install -g pnpm@9
           pnpm install
           pnpm build
+
+      - name: Package
+        run: |
           mkdir ${{ env.PLUGIN_NAME }}
-          cp README.md package.json logo.svg demo.gif ${{ env.PLUGIN_NAME }}
+          cp README.md package.json logo.svg demo-basic.gif demo-filter.gif ${{ env.PLUGIN_NAME }}
           mv dist ${{ env.PLUGIN_NAME }}
           zip -r ${{ env.PLUGIN_NAME }}.zip ${{ env.PLUGIN_NAME }}
-          ls
-          echo "::set-output name=tag_name::$(git tag --sort version:refname | tail -n 1)"
-      - name: Create Release
+
+      - name: Create Release and upload assets
         uses: ncipollo/release-action@v1
-        id: create_release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ github.ref }}
         with:
           allowUpdates: true
           draft: false
           prerelease: false
-
-      - name: Upload zip file
-        id: upload_zip
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./${{ env.PLUGIN_NAME }}.zip
-          asset_name: ${{ env.PLUGIN_NAME }}-${{ steps.build.outputs.tag_name }}.zip
-          asset_content_type: application/zip
-
-      - name: Upload package.json
-        id: upload_metadata
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./package.json
-          asset_name: package.json
-          asset_content_type: application/json
+          # Logseq 市场约定：Release 附带插件 zip + package.json
+          artifacts: ./${{ env.PLUGIN_NAME }}.zip, ./package.json

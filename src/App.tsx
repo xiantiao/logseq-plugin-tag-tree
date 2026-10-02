@@ -3,6 +3,7 @@ import { Input } from 'components/Input';
 import { useThemeMode } from 'hooks/useThemeMode';
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import foldIcon from '../fold-svgrepo-com.svg';
+import { t } from './i18n';
 import { TagList } from './components/TagList';
 import { useAppVisible } from './hooks/useAppVisible';
 import { usePluginSettings } from './hooks/usePluginSettings';
@@ -114,6 +115,8 @@ const iconBtn = css({
   border: 'none',
   padding: '0',
   cursor: 'pointer',
+  // 主题感知的图标颜色：深色主题下为接近白色，亮色主题下为深色
+  color: '$highContrast',
 });
 
 type Props = {
@@ -139,6 +142,10 @@ export function App({ themeMode: initialThemeMode, placement = 'overlay' }: Prop
   const [filter, setFilter] = useState('');
   const [expandNext, setExpandNext] = useState(true);
   const [apply, setApply] = useState<{ version: number; expand: boolean }>({ version: 0, expand: true });
+  // 手动刷新信号：变化时通知 TagList 重新查询
+  const [refreshSignal, setRefreshSignal] = useState(0);
+  // 标签筛选模式：开启后标签树变为筛选挑选器（且 / 或 / 除）
+  const [tagFilterOn, setTagFilterOn] = useState(false);
   // 拖拽排序默认开启，无需开关
   const themeMode = useThemeMode(initialThemeMode);
   const { settings, updateSetting } = usePluginSettings();
@@ -199,15 +206,78 @@ export function App({ themeMode: initialThemeMode, placement = 'overlay' }: Prop
         >
           {/* 搜索 + 菜单按钮 */}
           <div className={searchContainer()}>
-            <Input
-              css={{ flex: 1, padding: '$3', borderRadius: '$2' }}
-              size='2'
-              placeholder='Search tags'
-              onChange={handleSearchInputChange}
-            />
+            <div className={css({ position: 'relative', flex: 1, display: 'flex', minWidth: 0 })()}>
+              <Input
+                css={{ flex: 1, padding: '$3', borderRadius: '$2' }}
+                size='2'
+                placeholder='Search tags'
+                value={filter}
+                onChange={handleSearchInputChange}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setFilter('');
+                }}
+              />
+              {filter.trim() !== '' && (
+                <button
+                  className={css({
+                    position: 'absolute',
+                    right: '$3',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: 'none',
+                    backgroundColor: 'transparent',
+                    cursor: 'pointer',
+                    padding: '$1',
+                    color: '#8b949e',
+                    fontSize: '13px',
+                    lineHeight: 1,
+                  })()}
+                  title={t('exitSearch')}
+                  onClick={() => setFilter('')}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
             <button
               className={iconBtn()}
-              title={expandNext ? 'Expand all' : 'Collapse all'}
+              title={tagFilterOn ? t('exitTagFilter') : t('tagFilterTooltip')}
+              onClick={() => setTagFilterOn(v => !v)}
+              style={tagFilterOn ? {
+                backgroundColor: 'hsla(200, 85%, 50%, 0.16)',
+                borderRadius: '4px',
+                color: 'hsl(200, 85%, 45%)',
+              } : undefined}
+            >
+              <svg
+                viewBox="0 0 16 16"
+                width="15"
+                height="15"
+                aria-hidden="true"
+                style={{ opacity: 0.85 }}
+              >
+                <path
+                  d="M2 3h12l-4.6 5.3v4.2L7.6 11V8.3L2 3z"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.3"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+            <button
+              className={iconBtn()}
+              title='Refresh tags'
+              onClick={() => setRefreshSignal(v => v + 1)}
+            >
+              <span style={{ fontSize: 16, lineHeight: 1, opacity: 0.85 }}>↻</span>
+            </button>
+            <button
+              className={iconBtn()}
+              title={expandNext ? t('expandAll') : t('collapseAll')}
               onClick={() => {
                 try {
                   // 直接使用当前状态决定操作
@@ -239,12 +309,14 @@ export function App({ themeMode: initialThemeMode, placement = 'overlay' }: Prop
             </button>
           </div>
           <ThemeProvider settings={{ theme: logseq.settings?.theme || 'colorful', shortcut: logseq.settings?.shortcut || 'mod+shift+t' }}>
-            <TagList 
-              filter={filter} 
+            <TagList
+              filter={filter}
               sortAscending={settings.sortAscending}
               enableDragSort={true}
               refresh={apply.version}
               applyExpand={apply}
+              refreshSignal={refreshSignal}
+              tagFilter={tagFilterOn}
             />
           </ThemeProvider>
         </div>

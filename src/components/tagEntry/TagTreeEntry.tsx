@@ -1,15 +1,48 @@
 import * as Collapsible from '@radix-ui/react-collapsible';
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { styled } from '../../stitches.config';
+import { t } from '../../i18n';
 import { TagTreeNode } from '../../types';
 import { TagEntry } from './TagEntry';
-import { getTagColorTheme } from '../../utils';
+import { FilterCheck } from '../tagFilter';
+import { getTagColorTheme, orderedChildNodes } from '../../utils';
 import { useTheme } from '../../contexts/ThemeContext';
+import { TagTreeContext } from './TagTreeContext';
 
 const StyledTag = styled(Collapsible.Root, {
   display: 'flex',
   flexDirection: 'column',
   gap: '$1',
+});
+
+// 拖拽行容器：接收 top/bottom 插入线与 nested 高亮
+const DropRow = styled('div', {
+  position: 'relative',
+  borderRadius: '$1',
+  userSelect: 'none',
+  '&[data-dragging="true"]': {
+    opacity: '0.4',
+  },
+  '&[data-drop="nested"]': {
+    backgroundColor: 'hsla(200, 85%, 60%, 0.14)',
+    boxShadow: 'inset 0 0 0 2px hsl(200, 85%, 50%)',
+  },
+  '&[data-merge-selected="true"]': {
+    backgroundColor: 'hsla(140, 60%, 45%, 0.12)',
+  },
+  '&[data-merge-disabled="true"]': {
+    opacity: 0.4,
+  },
+});
+
+const DropLine = styled('div', {
+  position: 'absolute',
+  right: '4px',
+  height: '2px',
+  borderRadius: '2px',
+  backgroundColor: 'hsl(200, 85%, 48%)',
+  pointerEvents: 'none',
+  zIndex: 10,
 });
 
 const TagButton = styled('button', {
@@ -28,7 +61,7 @@ const TagButton = styled('button', {
   '&:hover': {
     backgroundColor: '$elevation1',
   },
-  
+
   variants: {
     expanded: {
       true: {
@@ -52,7 +85,6 @@ const TagButton = styled('button', {
     },
   },
 });
-
 const IconWrapper = styled('div', {
   display: 'flex',
   alignItems: 'center',
@@ -68,7 +100,7 @@ const IconWrapper = styled('div', {
   '.dark-theme &[data-state=open]': {
     backgroundColor: '$slate7 !important',
   },
-  
+
   variants: {
     theme: {
       simple: {
@@ -86,12 +118,11 @@ const IconWrapper = styled('div', {
     },
   },
 });
-
 const Chevron = styled('svg', {
   width: '12px',
   height: '12px',
   transition: 'transform 250ms, color 0.2s',
-  
+
   variants: {
     theme: {
       simple: {
@@ -105,14 +136,12 @@ const Chevron = styled('svg', {
     },
   },
 });
-
 const TagName = styled('span', {
   flex: 1,
   display: 'flex',
   alignItems: 'center',
   gap: '$2',
 });
-
 const TagNameText = styled('span', {
   padding: '$1 $3',
   borderRadius: '20px',
@@ -133,7 +162,7 @@ const TagNameText = styled('span', {
     backgroundColor: '$slate7 !important',
     filter: 'none',
   },
-  
+
   variants: {
     theme: {
       simple: {
@@ -164,9 +193,15 @@ const TagNameText = styled('span', {
         },
       },
     },
+    // 纯虚拟路径节点（无概念页面）：斜体弱化，提示不可打开页面
+    virtual: {
+      true: {
+        opacity: 0.72,
+        fontStyle: 'italic',
+      },
+    },
   },
 });
-
 const TagCount = styled('span', {
   padding: '2px 6px',
   borderRadius: '10px',
@@ -187,7 +222,7 @@ const TagCount = styled('span', {
     borderColor: '$slate6',
     color: '$slate11',
   },
-  
+
   variants: {
     theme: {
       simple: {
@@ -216,6 +251,41 @@ const TagCount = styled('span', {
   },
 });
 
+// 行悬停时显示的操作按钮（TagButton 本身是 button，这里用 span 避免嵌套 button）
+const EditButton = styled('span', {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: '24px',
+  height: '24px',
+  marginRight: '$1',
+  borderRadius: '$1',
+  color: '$slate10',
+  cursor: 'pointer',
+  opacity: 0,
+  flexShrink: 0,
+  transition: 'opacity 0.15s, background-color 0.15s, color 0.15s',
+  '[data-tag-path]:hover &': { opacity: 0.7 },
+  '&:hover': { opacity: 1, backgroundColor: '$slate4', color: '$slate12' },
+});
+
+// 合并多选模式下的勾选圆圈
+const MergeCheck = styled('span', {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: '20px',
+  height: '20px',
+  marginLeft: '$2',
+  flexShrink: 0,
+  color: 'hsl(140, 55%, 42%)',
+  '[data-merge-disabled="true"] &': { color: '$slate8' },
+});
+
+// 删除按钮（复用 EditButton 的交互，悬停时红色警示）
+const DeleteButton = styled(EditButton, {
+  '&:hover': { opacity: 1, backgroundColor: 'hsla(0, 70%, 50%, 0.14)', color: 'hsl(0, 70%, 50%)' },
+});
 const ContentWrapper = styled(Collapsible.Content, {
   paddingLeft: '24px',
 });
@@ -225,115 +295,375 @@ type Props = {
   depth?: number;
 };
 
-export function TagTreeEntry({ node, depth = 0 }: Props) {
-  const { isSimpleTheme } = useTheme();
-  const hasChildren = node.children.size > 0;
-  const hasContent = node.selfUsages.length > 0;
-  
-  // 叶子节点：没有子节点
-  if (!hasChildren) {
-    // 叶子节点：使用 TagEntry 渲染，显示末段名，禁用展开背景
-    return (
-      <TagEntry 
-        tag={{ name: node.fullPath, usages: node.selfUsages }} 
-        displayName={node.name}
-      />
-    );
+function readExpanded(fullPath: string): boolean {
+  try {
+    const saved = localStorage.getItem('logseq-plugin-tags-expanded');
+    const map = saved ? JSON.parse(saved) : {};
+    return Boolean(map[fullPath]);
+  } catch {
+    return false;
   }
-  
-  const [usageOpen, setUsageOpen] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem('logseq-plugin-tags-expanded');
-      const map = saved ? JSON.parse(saved) : {};
-      return Boolean(map[node.fullPath]);
-    } catch {
-      return false;
-    }
-  });
-  
-  const colorTheme = useMemo(() => getTagColorTheme(node.fullPath), [node.fullPath]);
+}
+
+export function TagTreeEntry({ node, depth = 0 }: Props) {
+  const ctx = React.useContext(TagTreeContext);
+
+  const hasChildren = node.children.size > 0;
+  const { isSimpleTheme } = useTheme();
+
+  // 所有 hooks 必须无条件调用（修复原先叶子节点提前 return 违反 Rules of Hooks）
+  const [usageOpen, setUsageOpen] = useState<boolean>(() => readExpanded(node.fullPath));
+
+  // 概念节点按概念页名着色（同一概念在多个位置出现时颜色一致）；纯虚拟路径节点按路径着色
+  const isConcept = node.conceptName !== null;
+  const colorKey = node.conceptName ?? node.fullPath;
+  const colorTheme = useMemo(() => getTagColorTheme(colorKey), [colorKey]);
   const hue = useMemo(() => {
     const match = colorTheme.light.match(/hsl\((\d+)/);
     return match ? match[1] : '0';
   }, [colorTheme]);
 
-  const handleOpenChange = (open: boolean) => {
-    setUsageOpen(open);
+  // 子节点：先按自定义顺序，再按名称兜底；搜索时仅保留可见节点；合并模式下隐藏源标签
+  const childNodes = useMemo(() => {
+    if (!ctx) return [];
+    let list = orderedChildNodes(
+      node,
+      ctx.orderMap[node.fullPath],
+      (a, b) => a.name.localeCompare(b.name),
+    );
+    if (ctx.visibleSet) list = list.filter((child) => ctx.visibleSet!.has(child.fullPath));
+    if (ctx.mergeMode) list = list.filter((child) => !ctx.mergeMode!.isHidden(child.fullPath));
+    return list;
+  }, [node, ctx]);
+
+  if (!ctx) return null;
+
+  const merge = ctx.mergeMode;
+  const filter = ctx.filterMode;
+  const filterStateOfNode = filter ? filter.stateOf(node.fullPath, node.conceptName) : null;
+
+  // 合并模式下源标签自身不渲染，但在原位置展平其子树
+  if (merge?.isHidden(node.fullPath)) {
+    return (
+      <>
+        {childNodes.map((child) => (
+          <TagTreeEntry key={child.fullPath} node={child} depth={depth} />
+        ))}
+      </>
+    );
+  }
+
+  const mergeSelected = merge?.selected.has(node.fullPath) ?? false;
+  const mergeSelectable = merge ? merge.isSelectable(node.fullPath) : true;
+
+  // 搜索态强制展开祖先链（不写回 localStorage，避免破坏折叠状态）
+  const open = ctx.visibleSet ? ctx.visibleSet.has(node.fullPath) : usageOpen;
+
+  const handleOpenChange = (next: boolean) => {
+    setUsageOpen(next);
     try {
       const saved = localStorage.getItem('logseq-plugin-tags-expanded');
       const map = saved ? JSON.parse(saved) : {};
-      map[node.fullPath] = open;
+      map[node.fullPath] = next;
       localStorage.setItem('logseq-plugin-tags-expanded', JSON.stringify(map));
     } catch {}
   };
 
   const handleOpenPage = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    await logseq.App.pushState('page', { name: node.fullPath });
+    // 纯虚拟路径节点没有页面，点击名称只触发展开/折叠（Collapsible.Trigger 默认行为）
+    if (!node.conceptName) {
+      handleOpenChange(!open);
+      return;
+    }
+    await logseq.App.pushState('page', { name: node.conceptName });
   };
 
-  // 非叶子节点：有子节点，需要展开/折叠功能
+  const dropPosition =
+    ctx.dropTarget?.path === node.fullPath ? ctx.dropTarget.position : null;
+  const lineInset = depth * 24 + 6;
 
-  return (
-    <StyledTag open={usageOpen} onOpenChange={handleOpenChange}>
-      <Collapsible.Trigger asChild>
-        <TagButton 
-          style={{ '--tag-hue': hue } as any}
-          theme={isSimpleTheme ? 'simple' : undefined}
-          expanded={usageOpen}
-          data-expanded={usageOpen}
+  // 基于 mousedown 的拖拽：行容器加 data-tag-path 供 elementFromPoint 定位；合并模式禁用
+  const mouseHandlers =
+    ctx.dragEnabled && !merge
+      ? {
+          onMouseDown: (e: React.MouseEvent<HTMLDivElement>) => {
+            ctx.onRowMouseDown(e, node.fullPath);
+          },
+        }
+      : {};
+
+  const handleNameClick = (e: React.MouseEvent) => {
+    if (merge) {
+      e.stopPropagation();
+      if (mergeSelectable) merge.onToggle(node.fullPath);
+      return;
+    }
+    void handleOpenPage(e);
+  };
+
+  // 行内公共内容（勾选圈 + chevron + 名称），merge 模式与普通模式复用
+  const mergeChevron = merge && (
+    <IconWrapper
+      style={{ backgroundColor: 'transparent' }}
+      onClick={(e) => {
+        e.stopPropagation();
+        handleOpenChange(!open);
+      }}
+    >
+      <Chevron viewBox="0 0 16 16" aria-hidden="true" style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+        <path
+          d="M6 4l4 4-4 4"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </Chevron>
+    </IconWrapper>
+  );
+
+  const rowContent = hasChildren ? (
+    <StyledTag open={open} onOpenChange={handleOpenChange}>
+      {filter ? (
+        // 筛选挑选模式：整行即选择器（左键包含 / 右键排除），chevron 独立控制展开
+        <TagButton
+          as="div"
+          style={{ '--tag-hue': hue } as React.CSSProperties}
+          expanded={open}
+          data-expanded={open}
+          onClick={() => filter.onToggle(node.fullPath)}
+          title={
+            node.conceptName
+              ? t('filterConceptRowTip')
+              : t('filterPathRowTip')
+          }
         >
-          <IconWrapper 
-            style={{ backgroundColor: isSimpleTheme ? 'transparent' : colorTheme.regular }}
-            theme={isSimpleTheme ? 'simple' : undefined}
+          <FilterCheck state={filterStateOfNode} />
+          <IconWrapper
+            style={{ backgroundColor: 'transparent' }}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenChange(!open);
+            }}
           >
-            <Chevron 
-              viewBox="0 0 16 16" 
-              aria-hidden="true"
-              style={{ 
-                transform: usageOpen ? 'rotate(90deg)' : 'rotate(0deg)'
-              }}
-              theme={isSimpleTheme ? 'simple' : undefined}
-            >
-              <path 
-                d="M6 4l4 4-4 4" 
-                fill="none" 
-                stroke={isSimpleTheme ? 'currentColor' : '#FFFFFF'} 
-                strokeWidth="2" 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
+            <Chevron viewBox="0 0 16 16" aria-hidden="true" style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+              <path
+                d="M6 4l4 4-4 4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               />
             </Chevron>
           </IconWrapper>
           <TagName>
             <TagNameText
-              style={{ 
-                backgroundColor: isSimpleTheme ? 'transparent !important' : colorTheme.regular,
-                border: isSimpleTheme ? 'none !important' : undefined,
-                borderRadius: isSimpleTheme ? '0 !important' : undefined,
-                padding: isSimpleTheme ? '0 !important' : undefined
+              virtual={!isConcept || undefined}
+              style={{
+                backgroundColor: 'transparent !important',
+                border: 'none !important',
+                borderRadius: '0 !important',
+                padding: '0 !important',
               }}
-              theme={isSimpleTheme ? 'simple' : undefined}
-              onClick={handleOpenPage}
-              title="在新页面中打开标签"
+              title={isConcept ? undefined : t('virtualPathTip')}
             >
               {node.name || 'Root'}
             </TagNameText>
           </TagName>
-          <TagCount theme={isSimpleTheme ? 'simple' : undefined}>
-            {node.totalCount}
-          </TagCount>
+          <TagCount theme={isSimpleTheme ? 'simple' : undefined}>{node.totalCount}</TagCount>
         </TagButton>
-      </Collapsible.Trigger>
+      ) : merge ? (
+        // 合并模式：不使用 Collapsible.Trigger，避免点击勾选时联动展开/折叠
+        <TagButton
+          as="div"
+          style={{ '--tag-hue': hue, cursor: mergeSelectable ? 'pointer' : 'default' } as React.CSSProperties}
+          expanded={open}
+          data-expanded={open}
+          onClick={handleNameClick}
+        >
+          <MergeCheck>
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+              {mergeSelected ? (
+                <path
+                  d="M8 1a7 7 0 100 14A7 7 0 008 1zm-1.2 9.8L4.3 8.3l.9-.9 1.6 1.6 3.4-3.4.9.9-4.3 4.3z"
+                  fill="currentColor"
+                />
+              ) : (
+                <circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" strokeWidth="1.3" />
+              )}
+            </svg>
+          </MergeCheck>
+          {mergeChevron}
+          <TagName>
+            <TagNameText
+              virtual={!isConcept || undefined}
+              style={{
+                backgroundColor: 'transparent !important',
+                border: 'none !important',
+                borderRadius: '0 !important',
+                padding: '0 !important',
+                color: '$slate12',
+                cursor: mergeSelectable ? 'pointer' : 'default',
+              }}
+              title={isConcept ? undefined : t('virtualPathTip')}
+            >
+              {node.name || 'Root'}
+            </TagNameText>
+          </TagName>
+        </TagButton>
+      ) : (
+        <Collapsible.Trigger asChild>
+          <TagButton
+            style={{ '--tag-hue': hue } as React.CSSProperties}
+            theme={isSimpleTheme ? 'simple' : undefined}
+            expanded={open}
+            data-expanded={open}
+          >
+            <IconWrapper
+              style={{ backgroundColor: isSimpleTheme ? 'transparent' : colorTheme.regular }}
+              theme={isSimpleTheme ? 'simple' : undefined}
+            >
+              <Chevron
+                viewBox="0 0 16 16"
+                aria-hidden="true"
+                style={{
+                  transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+                }}
+                theme={isSimpleTheme ? 'simple' : undefined}
+              >
+                <path
+                  d="M6 4l4 4-4 4"
+                  fill="none"
+                  stroke={isSimpleTheme ? 'currentColor' : '#FFFFFF'}
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </Chevron>
+            </IconWrapper>
+            <TagName>
+              <TagNameText
+                virtual={!isConcept || undefined}
+                style={{
+                  backgroundColor: isSimpleTheme ? 'transparent !important' : colorTheme.regular,
+                  border: isSimpleTheme ? 'none !important' : undefined,
+                  borderRadius: isSimpleTheme ? '0 !important' : undefined,
+                  padding: isSimpleTheme ? '0 !important' : undefined,
+                }}
+                theme={isSimpleTheme ? 'simple' : undefined}
+                onClick={handleOpenPage}
+                title={
+                  isConcept
+                    ? t('openConceptPage', { name: node.conceptName ?? '' })
+                    : t('virtualPathToggleTip')
+                }
+              >
+                {node.name || 'Root'}
+              </TagNameText>
+            </TagName>
+            <TagCount theme={isSimpleTheme ? 'simple' : undefined}>{node.totalCount}</TagCount>
+            <EditButton
+              title={isConcept ? t('renameConceptTag') : t('renameLevelPath')}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                ctx.onRequestRename(node.fullPath);
+              }}
+            >
+              <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                <path
+                  d="M11.3 2.3l2.4 2.4-7.6 7.6-2.9.7.7-2.9 7.4-7.8z"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.3"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </EditButton>
+            {isConcept && (
+              <EditButton
+                title={t('mergeOthersInto')}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  ctx.onRequestMerge(node.fullPath);
+                }}
+              >
+                <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+                  <path
+                    d="M2 3.5l5.2 4.5L2 12.5M8.8 3.5l5.2 4.5-5.2 4.5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </EditButton>
+            )}
+            <DeleteButton
+              title={
+                isConcept ? t('removePositionTip') : t('deleteLevelPath')
+              }
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                ctx.onRequestDelete(node.fullPath);
+              }}
+            >
+              <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                <path
+                  d="M2.5 4h11M6.2 4V2.8h3.6V4M3.5 4l.7 9.2h7.6L12.5 4M6.5 6.5v4M9.5 6.5v4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </DeleteButton>
+          </TagButton>
+        </Collapsible.Trigger>
+      )}
       <ContentWrapper>
-        {Array.from(node.children.values())
-          .sort((a, b) => a.name.localeCompare(b.name))
-          .map((child) => (
-            <TagTreeEntry key={child.fullPath} node={child} depth={depth + 1} />
-          ))}
+        {childNodes.map((child) => (
+          <TagTreeEntry key={child.fullPath} node={child} depth={depth + 1} />
+        ))}
       </ContentWrapper>
     </StyledTag>
+  ) : (
+    // 叶子节点必为概念节点：tag.name 传概念页名（打开页面正确），treePath 传完整虚拟路径
+    <TagEntry
+      tag={{ name: node.conceptName ?? node.fullPath, usages: node.selfUsages }}
+      displayName={node.name}
+      treePath={node.fullPath}
+    />
+  );
+
+  return (
+    <DropRow
+      {...mouseHandlers}
+      {...(filter
+        ? {
+            onContextMenu: (e: React.MouseEvent) => {
+              e.preventDefault();
+              e.stopPropagation();
+              filter.onToggleExclude(node.fullPath);
+            },
+          }
+        : {})}
+      data-tag-path={node.fullPath}
+      data-dragging={ctx.activeDragPath === node.fullPath || undefined}
+      data-drop={dropPosition ?? undefined}
+      data-merge-selected={merge && mergeSelected ? true : undefined}
+      data-merge-disabled={merge && !mergeSelectable ? true : undefined}
+    >
+      {dropPosition === 'top' && <DropLine style={{ top: 0, left: lineInset }} />}
+      {rowContent}
+      {dropPosition === 'bottom' && <DropLine style={{ bottom: 0, left: lineInset }} />}
+    </DropRow>
   );
 }
-
-

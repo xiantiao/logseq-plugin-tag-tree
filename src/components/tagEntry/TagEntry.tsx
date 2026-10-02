@@ -1,10 +1,13 @@
 import * as Collapsible from '@radix-ui/react-collapsible';
 import React, { useMemo, useState } from 'react';
 import { styled } from 'stitches.config';
+import { t } from '../../i18n';
 import { Tag } from 'types';
 import { getTagColorTheme } from '../../utils';
 import { useTheme } from '../../contexts/ThemeContext';
+import { FilterCheck } from '../tagFilter';
 import { TagUsage } from './TagUsage';
+import { TagTreeContext } from './TagTreeContext';
 
 const StyledTag = styled(Collapsible.Root, {
   display: 'flex',
@@ -231,24 +234,68 @@ const ContentWrapper = styled(Collapsible.Content, {
   paddingLeft: '24px',
 });
 
+// 行悬停时显示的操作按钮（TagButton 本身是 button，这里用 span 避免嵌套 button）
+const EditButton = styled('span', {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: '24px',
+  height: '24px',
+  marginRight: '$1',
+  borderRadius: '$1',
+  color: '$slate10',
+  cursor: 'pointer',
+  opacity: 0,
+  flexShrink: 0,
+  transition: 'opacity 0.15s, background-color 0.15s, color 0.15s',
+  '[data-tag-path]:hover &': { opacity: 0.7 },
+  '&:hover': { opacity: 1, backgroundColor: '$slate4', color: '$slate12' },
+});
+
+// 合并多选模式下的勾选圆圈
+const MergeCheck = styled('span', {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: '20px',
+  height: '20px',
+  marginLeft: '$2',
+  flexShrink: 0,
+  color: 'hsl(140, 55%, 42%)',
+  '[data-merge-disabled="true"] &': { color: '$slate8' },
+});
+
+// 删除按钮（复用 EditButton 的交互，悬停时红色警示）
+const DeleteButton = styled(EditButton, {
+  '&:hover': { opacity: 1, backgroundColor: 'hsla(0, 70%, 50%, 0.14)', color: 'hsl(0, 70%, 50%)' },
+});
+
 type Props = {
   tag: Tag;
   // 可选：覆盖显示名称（不影响打开页面与着色）
   displayName?: string;
+  // 该概念在虚拟层级树中的完整路径（展开状态/合并勾选/拖拽操作以此为准）
+  treePath: string;
 };
 
-export function TagEntry({ tag, displayName }: Props) {
+export function TagEntry({ tag, displayName, treePath }: Props) {
   const [usageOpen, setUsageOpen] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('logseq-plugin-tags-expanded');
       const map = saved ? JSON.parse(saved) : {};
-      return Boolean(map[tag.name]);
+      return Boolean(map[treePath]);
     } catch {
       return false;
     }
   });
-  
+
   const { isSimpleTheme } = useTheme();
+  const treeCtx = React.useContext(TagTreeContext);
+  const merge = treeCtx?.mergeMode ?? null;
+  const filter = treeCtx?.filterMode ?? null;
+  const mergeSelected = merge?.selected.has(treePath) ?? false;
+  const mergeSelectable = merge ? merge.isSelectable(treePath) : true;
+  const filterStateOf = filter ? filter.stateOf(treePath, tag.name) : null;
   
   // 获取标签的颜色主题
   const colorTheme = useMemo(() => getTagColorTheme(tag.name), [tag.name]);
@@ -264,72 +311,242 @@ export function TagEntry({ tag, displayName }: Props) {
     await logseq.App.pushState('page', { name: tag.name });
   };
 
-  // 持久化展开状态
+  // 持久化展开状态（以虚拟树完整路径为 key）
   const handleOpenChange = (open: boolean) => {
     setUsageOpen(open);
     try {
       const saved = localStorage.getItem('logseq-plugin-tags-expanded');
       const map = saved ? JSON.parse(saved) : {};
-      map[tag.name] = open;
+      map[treePath] = open;
       localStorage.setItem('logseq-plugin-tags-expanded', JSON.stringify(map));
     } catch {}
   };
 
-  return (
-    <StyledTag open={usageOpen} onOpenChange={handleOpenChange}>
-      <Collapsible.Trigger asChild>
-        <TagButton 
+  // 筛选挑选模式：整行即选择器（左键包含 / 右键排除），不展示用法列表，保持树紧凑
+  if (filter) {
+    return (
+      <StyledTag
+        open={usageOpen}
+        onOpenChange={handleOpenChange}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          filter.onToggleExclude(treePath);
+        }}
+      >
+        <TagButton
+          as="div"
           style={{ '--tag-hue': hue } as any}
-          theme={isSimpleTheme ? 'simple' : undefined}
           expanded={usageOpen}
           data-expanded={usageOpen}
+          onClick={() => filter.onToggle(treePath)}
+          title={t('filterConceptRowTip')}
         >
-          <IconWrapper 
-            style={{ backgroundColor: isSimpleTheme ? 'transparent' : colorTheme.regular }}
-            theme={isSimpleTheme ? 'simple' : undefined}
+          <FilterCheck state={filterStateOf} />
+          <IconWrapper
+            style={{ backgroundColor: 'transparent' }}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenChange(!usageOpen);
+            }}
           >
-            <Chevron 
-              viewBox="0 0 16 16" 
-              aria-hidden="true" 
-              style={{ transform: usageOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}
-              theme={isSimpleTheme ? 'simple' : undefined}
-            >
-              <path 
-                d="M6 4l4 4-4 4" 
-                fill="none" 
-                stroke={isSimpleTheme ? 'currentColor' : '#FFFFFF'} 
-                strokeWidth="2" 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
+            <Chevron viewBox="0 0 16 16" aria-hidden="true" style={{ transform: usageOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+              <path
+                d="M6 4l4 4-4 4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               />
             </Chevron>
           </IconWrapper>
           <TagName>
             <TagNameText
-              style={{ 
-                backgroundColor: isSimpleTheme ? 'transparent !important' : colorTheme.regular,
-                border: isSimpleTheme ? 'none !important' : undefined,
-                borderRadius: isSimpleTheme ? '0 !important' : undefined,
-                padding: isSimpleTheme ? '0 !important' : undefined
+              style={{
+                backgroundColor: 'transparent !important',
+                border: 'none !important',
+                borderRadius: '0 !important',
+                padding: '0 !important',
               }}
-              theme={isSimpleTheme ? 'simple' : undefined}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleOpenPage(e);
-              }}
-              title="在新页面中打开标签"
             >
               {displayName ?? tag.name}
             </TagNameText>
           </TagName>
-          <TagCount theme={isSimpleTheme ? 'simple' : undefined}>
-            {tag.usages.length}
-          </TagCount>
+          <TagCount theme={isSimpleTheme ? 'simple' : undefined}>{tag.usages.length}</TagCount>
         </TagButton>
-      </Collapsible.Trigger>
-      <ContentWrapper>
-        <TagUsage usages={tag.usages} />
-      </ContentWrapper>
+      </StyledTag>
+    );
+  }
+
+  return (
+    <StyledTag open={usageOpen} onOpenChange={handleOpenChange}>
+      {merge ? (
+        // 合并模式：不使用 Collapsible.Trigger，避免点击勾选时联动展开/折叠
+        <TagButton
+          as="div"
+          style={{ '--tag-hue': hue, cursor: mergeSelectable ? 'pointer' : 'default' } as any}
+          expanded={usageOpen}
+          data-expanded={usageOpen}
+          onClick={() => {
+            if (mergeSelectable) merge.onToggle(treePath);
+          }}
+        >
+          <MergeCheck>
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+              {mergeSelected ? (
+                <path
+                  d="M8 1a7 7 0 100 14A7 7 0 008 1zm-1.2 9.8L4.3 8.3l.9-.9 1.6 1.6 3.4-3.4.9.9-4.3 4.3z"
+                  fill="currentColor"
+                />
+              ) : (
+                <circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" strokeWidth="1.3" />
+              )}
+            </svg>
+          </MergeCheck>
+          <IconWrapper style={{ backgroundColor: 'transparent' }}>
+            <Chevron viewBox="0 0 16 16" aria-hidden="true" style={{ transform: usageOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+              <path
+                d="M6 4l4 4-4 4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </Chevron>
+          </IconWrapper>
+          <TagName>
+            <TagNameText
+              style={{
+                backgroundColor: 'transparent !important',
+                border: 'none !important',
+                borderRadius: '0 !important',
+                padding: '0 !important',
+                cursor: mergeSelectable ? 'pointer' : 'default',
+              }}
+            >
+              {displayName ?? tag.name}
+            </TagNameText>
+          </TagName>
+        </TagButton>
+      ) : (
+        <Collapsible.Trigger asChild>
+          <TagButton
+            style={{ '--tag-hue': hue } as any}
+            theme={isSimpleTheme ? 'simple' : undefined}
+            expanded={usageOpen}
+            data-expanded={usageOpen}
+          >
+            <IconWrapper
+              style={{ backgroundColor: isSimpleTheme ? 'transparent' : colorTheme.regular }}
+              theme={isSimpleTheme ? 'simple' : undefined}
+            >
+              <Chevron
+                viewBox="0 0 16 16"
+                aria-hidden="true"
+                style={{ transform: usageOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}
+                theme={isSimpleTheme ? 'simple' : undefined}
+              >
+                <path
+                  d="M6 4l4 4-4 4"
+                  fill="none"
+                  stroke={isSimpleTheme ? 'currentColor' : '#FFFFFF'}
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </Chevron>
+            </IconWrapper>
+            <TagName>
+              <TagNameText
+                style={{
+                  backgroundColor: isSimpleTheme ? 'transparent !important' : colorTheme.regular,
+                  border: isSimpleTheme ? 'none !important' : undefined,
+                  borderRadius: isSimpleTheme ? '0 !important' : undefined,
+                  padding: isSimpleTheme ? '0 !important' : undefined,
+                }}
+                theme={isSimpleTheme ? 'simple' : undefined}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenPage(e);
+                }}
+                title={t('openConceptPage', { name: tag.name })}
+              >
+                {displayName ?? tag.name}
+              </TagNameText>
+            </TagName>
+            <TagCount theme={isSimpleTheme ? 'simple' : undefined}>
+              {tag.usages.length}
+            </TagCount>
+            {treeCtx && (
+              <>
+                <EditButton
+                  title={t('renameConceptTag')}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    treeCtx.onRequestRename(treePath);
+                  }}
+                >
+                  <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                    <path
+                      d="M11.3 2.3l2.4 2.4-7.6 7.6-2.9.7.7-2.9 7.4-7.8z"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </EditButton>
+                <EditButton
+                  title={t('mergeOthersInto')}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    treeCtx.onRequestMerge(treePath);
+                  }}
+                >
+                  <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+                    <path
+                      d="M2 3.5l5.2 4.5L2 12.5M8.8 3.5l5.2 4.5-5.2 4.5"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </EditButton>
+                <DeleteButton
+                  title={t('removePositionTip')}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    treeCtx.onRequestDelete(treePath);
+                  }}
+                >
+                  <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                    <path
+                      d="M2.5 4h11M6.2 4V2.8h3.6V4M3.5 4l.7 9.2h7.6L12.5 4M6.5 6.5v4M9.5 6.5v4"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </DeleteButton>
+              </>
+            )}
+          </TagButton>
+        </Collapsible.Trigger>
+      )}
+      {!merge && (
+        <ContentWrapper>
+          <TagUsage usages={tag.usages} />
+        </ContentWrapper>
+      )}
     </StyledTag>
   );
 }

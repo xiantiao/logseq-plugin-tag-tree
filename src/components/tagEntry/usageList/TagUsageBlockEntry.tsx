@@ -3,7 +3,7 @@ import { Box } from 'components/Box';
 import { Mark, Paragraph, Text } from 'components/Text';
 import { QueryResultBlockEntity } from 'logseqQueryResultTypes';
 import React, { useContext, useEffect, useState } from 'react';
-import { escapeRegExp } from 'utils';
+import { entityUuid, escapeRegExp } from 'utils';
 import { commonEntryStyle } from '.';
 import { TagContext } from '../TagContext';
 import { styled } from 'stitches.config';
@@ -129,8 +129,9 @@ export const TagUsageBlockEntry = React.memo(({ block }: Props) => {
     }
     
     // 否则执行默认的跳转到块的行为
-    if (containingPage != null) {
-      await logseq.Editor.scrollToBlockInPage(containingPage.name, block.uuid['$uuid$']);
+    const blockUuid = entityUuid(block);
+    if (containingPage != null && blockUuid) {
+      await logseq.Editor.scrollToBlockInPage(containingPage.name, blockUuid);
     }
   };
 

@@ -1,6 +1,8 @@
 import { QueryResultBlockEntity, QueryResultPageEntity } from 'logseqQueryResultTypes';
 import React from 'react';
+import { entityUuid } from 'utils';
 import { styled } from 'stitches.config';
+import { t } from '../../i18n';
 import { useTheme } from '../../contexts/ThemeContext';
 
 const UsageList = styled('div', {
@@ -222,13 +224,13 @@ export function TagUsage({ usages }: Props) {
           if (!hasPageLink && !isSimpleTheme) {
             // 只在纯文本前添加txt标识（简单主题下不显示）
             elements.push(
-              <PagePath 
-                key="page-path" 
-                onClick={(e) => handleTextSearch(text, e)}
-                title="点击搜索文本"
-              >
-                TXT
-              </PagePath>
+              <PagePath
+              key="page-path"
+              onClick={(e) => handleTextSearch(text, e)}
+              title={t('searchTextTip')}
+            >
+              TXT
+            </PagePath>
             );
           }
           elements.push(
@@ -269,10 +271,10 @@ export function TagUsage({ usages }: Props) {
         if (!hasPageLink && !isSimpleTheme) {
           // 只在纯文本前添加txt标识（简单主题下不显示）
           elements.push(
-            <PagePath 
-              key="page-path" 
+            <PagePath
+              key="page-path"
               onClick={(e) => handleTextSearch(text, e)}
-              title="点击搜索文本"
+              title={t('searchTextTip')}
               theme={isSimpleTheme ? 'simple' : undefined}
             >
               TXT
@@ -296,8 +298,8 @@ export function TagUsage({ usages }: Props) {
 
   return (
     <UsageList>
-      {usages.map((item) => (
-        <UsageItem key={item.uuid.$uuid$}>
+      {usages.map((item, idx) => (
+        <UsageItem key={entityUuid(item) ?? idx}>
           {renderContent(item)}
         </UsageItem>
       ))}

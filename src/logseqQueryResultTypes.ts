@@ -34,7 +34,8 @@ export type QueryResultBlockEntity = {
   title?: BlockEntity['title'];
 
   // Fields different from original BlockEntity type
-  uuid: QueryBlockUUID;
+  // datascriptQuery 实测返回纯字符串，SDK 实体为 {$uuid$}，两种形态都兼容
+  uuid: string | QueryBlockUUID;
 
   // Fields from query result
   'pre-block?'?: boolean;
