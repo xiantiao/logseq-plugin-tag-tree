@@ -28,6 +28,206 @@ export function entityUuid(entity: unknown): string | null {
   return null;
 }
 
+/**
+ * 跳转高亮：给目标块注入短暂的背景闪烁（模拟 Logseq 原生块引用跳转的选中态，
+ * 插件 API 未公开该能力，改为向宿主文档注入样式并给块元素挂 class）。
+ */
+const JUMP_HIGHLIGHT_CLASS = 'tags-jump-highlight';
+const JUMP_HIGHLIGHT_STYLE_ID = 'tags-jump-highlight-style';
+
+function highlightJumpTarget(doc: Document, uuid: string): void {
+  try {
+    const content = doc.querySelector(`#block-content-${uuid}`);
+    // 高亮整行（含圆点），向上找最近的块容器；找不到就用内容元素本身
+    const target = content?.closest('.ls-block') ?? content;
+    if (!target) return;
+    if (!doc.getElementById(JUMP_HIGHLIGHT_STYLE_ID)) {
+      const style = doc.createElement('style');
+      style.id = JUMP_HIGHLIGHT_STYLE_ID;
+      style.textContent = `
+        @keyframes tags-jump-flash {
+          0%, 55% { background-color: rgba(63, 125, 235, 0.28); }
+          100% { background-color: transparent; }
+        }
+        .${JUMP_HIGHLIGHT_CLASS} { animation: tags-jump-flash 2s ease-out 1 both; }
+      `;
+      doc.head?.appendChild(style);
+    }
+    target.classList.remove(JUMP_HIGHLIGHT_CLASS);
+    // 强制 reflow，确保再次添加 class 时动画重新触发
+    void (target as HTMLElement).offsetWidth;
+    target.classList.add(JUMP_HIGHLIGHT_CLASS);
+    window.setTimeout(() => target.classList.remove(JUMP_HIGHLIGHT_CLASS), 2200);
+  } catch {
+    // 宿主文档不可访问时静默忽略（滚动本身不受影响）
+  }
+}
+
+// 跳转会话令牌：新一轮跳转使旧会话的重试链失效（防止连点时旧定时器干扰）
+let scrollSessionToken = 0;
+
+export async function scrollToBlockReliably(pageName: string, uuid: string): Promise<void> {
+  const session = ++scrollSessionToken;
+  const isStale = () => session !== scrollSessionToken;
+
+  // 0. 当前页面状态：同页时 pushState 路由可能被去重，需要不同的导航策略
+  let samePage = false;
+  try {
+    const current = await logseq.Editor.getCurrentPage();
+    samePage = !!current && (current as { name?: unknown }).name === pageName;
+  } catch {
+    // 忽略：不影响主流程
+  }
+  console.log('[tags] scroll: begin', { page: pageName, uuid: uuid.slice(0, 8), samePage });
+
+  // 1. 沿 parent 链向上逐层展开折叠祖先（Editor.getBlock 接受 uuid 或数字 EntityID；
+  //    顶层块的 parent 指向页面实体，getBlock 返回 null 时到达根，停止遍历）
+  try {
+    let cur = await logseq.Editor.getBlock(uuid).catch(() => null);
+    if (!cur) console.warn('[tags] scroll: getBlock returned null for', uuid);
+    let hops = 0;
+    while (cur?.parent?.id && hops < 64) {
+      const parent = await logseq.Editor.getBlock(cur.parent.id).catch(() => null);
+      if (!parent?.uuid) break; // 页面层级：parent 是页面而非块
+      console.log('[tags] scroll: ancestor', hops, String(parent.uuid).slice(0, 8), 'collapsed =', (parent as { collapsed?: unknown }).collapsed);
+      await logseq.Editor.setBlockCollapsed(parent.uuid, false).catch(() => undefined);
+      cur = parent;
+      hops++;
+    }
+    console.log('[tags] scroll: expanded ancestors, hops =', hops);
+  } catch (e) {
+    console.warn('[tags] scroll: ancestor walk failed:', e);
+  }
+  if (isStale()) return;
+
+  // 2. 滚动定位
+  //    Logseq 原生跳转链路（逆向主程序证实）：pushState('page',{name},{anchor})
+  //    → set-route-match! → 固定 200ms 后 getElementsByClassName(uuid) 滚动+选中。
+  //    大页面渲染超过 200ms 时该窗口错过即静默失败，因此这里：
+  //    - 同页且元素已渲染 → 直接 DOM 滚动（不走路由）
+  //    - 跨页 → pushState 带 anchor，并用 replaceState 在重试轮次中反复重开 200ms 窗口
+  //    - 全部失败 → selectBlock 原生选中兜底（内部会滚动定位）
+  let hostDoc: Document;
+  try {
+    hostDoc = window.parent?.document ?? document;
+  } catch {
+    hostDoc = document;
+  }
+
+  let highlighted = false;
+  let settled = false;
+  let attemptNo = 0;
+  let lastFound = false;
+
+  // 双通道查找：块内容元素（#block-content-uuid）与块容器（uuid class，
+  // Logseq 原生 highlight-element 按 class 定位），优先返回已渲染的候选
+  const findEl = (): Element | null => {
+    const candidates: Element[] = [];
+    try {
+      const byId = hostDoc.querySelector(`#block-content-${uuid}`);
+      if (byId) candidates.push(byId);
+      const byClass = hostDoc.querySelector(`.ls-block.${uuid}`) ?? hostDoc.querySelector(`.${uuid}`);
+      if (byClass && !candidates.includes(byClass)) candidates.push(byClass);
+    } catch {
+      // uuid 非法时选择器可能抛错，忽略
+    }
+    for (const c of candidates) {
+      const r = c.getBoundingClientRect();
+      if (r.width > 0 || r.height > 0) return c;
+    }
+    return candidates[0] ?? null;
+  };
+
+  const attempt = (phase: string): boolean => {
+    attemptNo++;
+    const el = findEl();
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      const rendered = rect.width > 0 || rect.height > 0;
+      let vh = 800;
+      try {
+        vh = (window.parent ?? window).innerHeight || 800;
+      } catch {
+        vh = window.innerHeight || 800;
+      }
+      const visible = rect.top >= -10 && rect.top < vh * 0.75;
+      lastFound = true;
+      console.log('[tags] scroll: attempt', attemptNo, {
+        phase,
+        found: true,
+        rendered,
+        top: Math.round(rect.top),
+        h: Math.round(rect.height),
+        visible,
+      });
+      if (rendered) {
+        if (!highlighted) {
+          highlighted = true;
+          highlightJumpTarget(hostDoc, uuid);
+        }
+        if (visible) {
+          settled = true;
+          return true; // 已到位：后续重试直接跳过
+        }
+        el.scrollIntoView({ block: 'center' });
+        return false;
+      }
+    } else {
+      lastFound = false;
+      console.log('[tags] scroll: attempt', attemptNo, { phase, found: false, samePage });
+    }
+    return false;
+  };
+
+  // 与 Editor.scrollToBlockInPage 等价（SDK 源码证实其内部即 App.pushState + anchor query）
+  const navigate = (withAnchor: boolean, replace: boolean): void => {
+    try {
+      const query = withAnchor ? { anchor: `block-content-${uuid}` } : undefined;
+      if (replace) {
+        logseq.App.replaceState('page', { name: pageName }, query);
+      } else {
+        logseq.App.pushState('page', { name: pageName }, query);
+      }
+    } catch {
+      // 导航失败交由重试兜底
+    }
+  };
+
+  if (!attempt('initial')) {
+    if (samePage) {
+      // 同页面：先推无 anchor 版本重置路由状态（两次 path 必不同，绕过去重），
+      // 随后带 anchor 的推送会触发原生 anchor 跳转链
+      navigate(false, false);
+      window.setTimeout(() => {
+        if (!isStale() && !settled) navigate(true, false);
+      }, 120);
+    } else {
+      navigate(true, false);
+    }
+
+    // 大页面渲染可能远超原生 200ms 的 anchor 窗口，重试轮次拉长，
+    // 每轮元素仍未出现时用 replaceState 重开一次 anchor 窗口（不增加历史记录）
+    const delays = [400, 800, 1400, 2200, 3200, 4500];
+    delays.forEach((delay, i) => {
+      window.setTimeout(() => {
+        if (isStale() || settled) return;
+        if (attempt(`retry-${delay}ms`)) return;
+        if (i === delays.length - 1) {
+          // 终极兜底：原生选中（内部滚动定位，等价原生块引用跳转的选中态）
+          console.log('[tags] scroll: final fallback -> selectBlock');
+          logseq.Editor.selectBlock(uuid).catch(() => undefined);
+          window.setTimeout(() => {
+            if (!isStale() && !settled) attempt('post-select');
+          }, 600);
+        } else if (!lastFound) {
+          // 元素仍未进 DOM（页面渲染慢）：重开 anchor 跳转窗口
+          navigate(true, true);
+        }
+      }, delay);
+    });
+  }
+}
+
 export function orderBy<T>(retriever: (v: T) => number, desc?: boolean): (a: T, b: T) => number {
   return desc
     ? (rhs, lhs) => retriever(lhs) - retriever(rhs)

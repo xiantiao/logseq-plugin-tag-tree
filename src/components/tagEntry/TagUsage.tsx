@@ -1,6 +1,6 @@
 import { QueryResultBlockEntity, QueryResultPageEntity } from 'logseqQueryResultTypes';
 import React from 'react';
-import { entityUuid, isPage } from 'utils';
+import { entityUuid, isPage, scrollToBlockReliably } from 'utils';
 import { styled } from 'stitches.config';
 import { t } from '../../i18n';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -159,7 +159,7 @@ export function TagUsage({ usages }: Props) {
     if (!uuid || !block.page?.id) return;
     const page = await logseq.Editor.getPage(block.page.id).catch(() => null);
     if (page) {
-      await logseq.Editor.scrollToBlockInPage(page.name, uuid);
+      scrollToBlockReliably(page.name, uuid);
     }
   };
 
@@ -189,11 +189,14 @@ export function TagUsage({ usages }: Props) {
       if (results.length === 1) {
         console.log('Single result found:', results[0][0]);
         const block = results[0][0];
+        // 查询结果的 uuid 可能是 {$uuid$} 包裹对象，必须经 entityUuid 归一化为字符串，
+        // 否则 scrollToBlockInPage 会静默失败
+        const uuid = entityUuid(block);
         // 获取页面信息
         const page = await logseq.Editor.getPage(block.page.id);
-        if (page) {
+        if (page && uuid) {
           console.log('Navigating to block in page:', page.name);
-          await logseq.Editor.scrollToBlockInPage(page.name, block.uuid);
+          scrollToBlockReliably(page.name, uuid);
         } else {
           console.log('Page not found, opening search panel');
           await logseq.App.openSearch(text);
@@ -297,9 +300,8 @@ export function TagUsage({ usages }: Props) {
           );
         }
         elements.push(
-          <ContentText 
+          <ContentText
             key={`text-${lastIndex}`}
-            onClick={(e) => handleTextSearch(text, e)}
             theme={isSimpleTheme ? 'simple' : undefined}
           >
             {truncateText(text)}

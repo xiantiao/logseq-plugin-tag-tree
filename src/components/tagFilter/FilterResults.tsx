@@ -3,7 +3,7 @@ import { styled } from '../../stitches.config';
 import { t } from '../../i18n';
 import { QueryResultBlockEntity, QueryResultPageEntity } from '../../logseqQueryResultTypes';
 import { TagUsageEntity } from '../../types';
-import { entityUuid, isPage } from '../../utils';
+import { entityUuid, isPage, scrollToBlockReliably } from '../../utils';
 import { filterEntityKey } from '../../tagModel/tagFilter';
 
 /**
@@ -260,7 +260,7 @@ function ResultEntry({ entity }: { entity: TagUsageEntity }) {
       const p = await logseq.Editor.getPage(block.page.id).catch(() => null);
       page = p?.name ?? null;
     }
-    if (page && uuid) logseq.Editor.scrollToBlockInPage(page, uuid);
+    if (page && uuid) scrollToBlockReliably(page, uuid);
   };
 
   if (isPageEntity) {
