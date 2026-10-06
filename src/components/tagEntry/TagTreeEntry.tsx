@@ -356,6 +356,12 @@ export function TagTreeEntry({ node, depth = 0 }: Props) {
   const mergeSelected = merge?.selected.has(node.fullPath) ?? false;
   const mergeSelectable = merge ? merge.isSelectable(node.fullPath) : true;
 
+  // 虚拟层级节点存在同名页面（如仅被 [[x]] 引用过）时：点击名称跳转该页面，样式不再弱化
+  const virtualPageExists =
+    !node.conceptName &&
+    !!ctx.virtualPageNames &&
+    ctx.virtualPageNames.has(node.name.toLowerCase());
+
   // 搜索态强制展开祖先链（不写回 localStorage，避免破坏折叠状态）
   const open = ctx.visibleSet ? ctx.visibleSet.has(node.fullPath) : usageOpen;
 
@@ -371,8 +377,12 @@ export function TagTreeEntry({ node, depth = 0 }: Props) {
 
   const handleOpenPage = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    // 纯虚拟路径节点没有页面，点击名称只触发展开/折叠（Collapsible.Trigger 默认行为）
+    // 纯虚拟路径节点：存在同名页面时跳转该页面，否则点击名称仅展开/折叠（Collapsible.Trigger 默认行为）
     if (!node.conceptName) {
+      if (virtualPageExists) {
+        await logseq.App.pushState('page', { name: node.name });
+        return;
+      }
       handleOpenChange(!open);
       return;
     }
@@ -461,13 +471,13 @@ export function TagTreeEntry({ node, depth = 0 }: Props) {
           </IconWrapper>
           <TagName>
             <TagNameText
-              virtual={!isConcept || undefined}
+              virtual={(!isConcept && !virtualPageExists) || undefined}
               style={{
                 // 筛选模式：固定深灰胶囊底保证白字可读（行内样式不支持 !important，
                 // 深色主题由 .dark-theme 类规则接管为透明底+浅色字，不受影响）
                 backgroundColor: 'hsl(215, 15%, 42%)',
               }}
-              title={isConcept ? undefined : t('virtualPathTip')}
+              title={isConcept ? undefined : virtualPageExists ? undefined : t('virtualPathTip')}
             >
               {node.name || 'Root'}
             </TagNameText>
@@ -498,7 +508,7 @@ export function TagTreeEntry({ node, depth = 0 }: Props) {
           {mergeChevron}
           <TagName>
             <TagNameText
-              virtual={!isConcept || undefined}
+              virtual={(!isConcept && !virtualPageExists) || undefined}
               style={{
                 backgroundColor: 'transparent !important',
                 border: 'none !important',
@@ -507,7 +517,7 @@ export function TagTreeEntry({ node, depth = 0 }: Props) {
                 color: '$slate12',
                 cursor: mergeSelectable ? 'pointer' : 'default',
               }}
-              title={isConcept ? undefined : t('virtualPathTip')}
+              title={isConcept ? undefined : virtualPageExists ? undefined : t('virtualPathTip')}
             >
               {node.name || 'Root'}
             </TagNameText>
@@ -545,7 +555,7 @@ export function TagTreeEntry({ node, depth = 0 }: Props) {
             </IconWrapper>
             <TagName>
               <TagNameText
-                virtual={!isConcept || undefined}
+                virtual={(!isConcept && !virtualPageExists) || undefined}
                 style={{
                   backgroundColor: isSimpleTheme ? 'transparent !important' : colorTheme.regular,
                   border: isSimpleTheme ? 'none !important' : undefined,
@@ -557,7 +567,9 @@ export function TagTreeEntry({ node, depth = 0 }: Props) {
                 title={
                   isConcept
                     ? t('openConceptPage', { name: node.conceptName ?? '' })
-                    : t('virtualPathToggleTip')
+                    : virtualPageExists
+                      ? t('openPage', { name: node.name })
+                      : t('virtualPathToggleTip')
                 }
               >
                 {node.name || 'Root'}

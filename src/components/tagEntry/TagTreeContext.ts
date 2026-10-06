@@ -59,6 +59,13 @@ export type TagTreeContextValue = {
   orderMap: TagOrderMap;
   /** 搜索时非 null，仅渲染集合内节点并强制展开祖先链 */
   visibleSet: Set<string> | null;
+
+  /**
+   * 虚拟层级节点中存在同名页面的段名集合（小写）：
+   * 如 a/b/#c 中的层级 b 在图谱里有 [[b]] 页面时，点击该层级名称可跳转对应页面。
+   * null = 尚未检出或无任何命中（点击仍为展开/折叠）。
+   */
+  virtualPageNames: Set<string> | null;
 };
 
 export const TagTreeContext = React.createContext<TagTreeContextValue | null>(null);

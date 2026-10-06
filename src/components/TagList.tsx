@@ -307,6 +307,49 @@ export function TagList({ filter, sortAscending, enableDragSort = true, refresh 
   // 树中所有节点路径（含虚拟中间节点），用于重命名时的同名冲突检测
   const existingPaths = useMemo(() => new Set(treeIndex.keys()), [treeIndex]);
 
+  // ---------- 虚拟层级的同名页面检测 ----------
+  // 中间层级节点（如 a/b/#c 中的 b）默认没有页面，但图谱中可能存在同名页面（如仅被 [[b]] 引用过）。
+  // 一次批量查询检出后注入 context，点击该层级名称即可跳转对应页面（TagTreeEntry 消费）。
+  const [virtualPageNames, setVirtualPageNames] = useState<Set<string> | null>(null);
+
+  React.useEffect(() => {
+    let mounted = true;
+    const names = new Set<string>();
+    treeIndex.forEach((node) => {
+      if (!node.conceptName && node.name) names.add(node.name.toLowerCase());
+    });
+    if (names.size === 0) {
+      setVirtualPageNames(null);
+      return;
+    }
+    void logseq.DB.datascriptQuery(
+      `
+      [:find ?name
+       :in $ [?names ...]
+       :where
+       [?p :block/name ?name]]
+      `,
+      Array.from(names),
+    )
+      .then((rows) => {
+        if (!mounted) return;
+        const found = new Set<string>();
+        if (Array.isArray(rows)) {
+          for (const row of rows) {
+            const name = Array.isArray(row) ? row[0] : null;
+            if (typeof name === 'string' && name) found.add(name.toLowerCase());
+          }
+        }
+        setVirtualPageNames(found.size > 0 ? found : null);
+      })
+      .catch(() => {
+        if (mounted) setVirtualPageNames(null);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [treeIndex]);
+
   // 重命名输入的实时校验与影响预览
   const renamePreview = useMemo(() => {
     if (!renamePath) return null;
@@ -1215,6 +1258,7 @@ export function TagList({ filter, sortAscending, enableDragSort = true, refresh 
     filterMode,
     orderMap,
     visibleSet: mergeMode ? mergeVisibleSet : visibleSet,
+    virtualPageNames,
   };
 
   const rootLevelText = t('rootLevel');
